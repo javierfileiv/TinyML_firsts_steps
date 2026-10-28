@@ -1,0 +1,24 @@
+# West workspace
+.zephyr/
+.west/
+zephyr/
+modules/
+bootloader/
+
+# Python
+.venv/
+__pycache__/
+
+# Zephyr SDK (large, reinstalled locally)
+sdk/
+
+# Build artifacts
+build/
+*.o
+*.elf
+*.bin
+*.hex
+
+# Dataset (large binary-ish captures)
+dataset/
+dataset_128/

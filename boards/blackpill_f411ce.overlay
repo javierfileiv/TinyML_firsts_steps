@@ -1,0 +1,33 @@
+/*
+ * Board DTS already routes I2C1 on PB8/PB9, USART1 on PA9/PA10,
+ * user LED on PC13 (led0) and KEY button on PA0 (sw0).
+ * Declared here: the MPU6050 on I2C1 and the USB CDC ACM console.
+ * Note: PA1 is taken by adc1 in the board DTS, so INT goes to PA2.
+ */
+
+/ {
+	chosen {
+		zephyr,console = &cdc_acm_uart0;
+	};
+};
+
+&i2c1 {
+	status = "okay";
+	pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb9>;
+    pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_FAST>; /* 400 kHz */
+
+	mpu6050: mpu6050@68 {
+		compatible = "invensense,mpu6050";
+		reg = <0x68>;
+		/* INT pin wired to PA2, data-ready fires on rising edge */
+		int-gpios = <&gpioa 2 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+		status = "okay";
+	};
+};
+
+&usbotg_fs {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
