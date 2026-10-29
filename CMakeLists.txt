@@ -8,4 +8,11 @@ target_sources(app PRIVATE
 	src/imu.c
 	src/capture.c
 	src/dfu_boot.c
+	model/inference.cc
+)
+
+# model_data.h sits at the application root, inference.h in model/
+target_include_directories(app PRIVATE
+	${CMAKE_SOURCE_DIR}
+	${CMAKE_SOURCE_DIR}/model
 )
