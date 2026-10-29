@@ -79,6 +79,9 @@ python tools/capture.py -p /dev/ttyACM0 -c A           # gesture class A
   board. The window then records the gesture performed during those
   seconds.
 - The KEY button on the board also starts a capture.
+- Typing `w` (in tio, or in the tool's terminal) toggles watch mode on
+  the board: the CSV dump goes silent and only the detections are
+  printed — the final-product voice.
 - Every window is typed-validated and required to contain exactly 256
   rows; malformed or short frames are dropped with a warning.
 - `q` or Ctrl-C quits and restores the terminal.

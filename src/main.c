@@ -21,7 +21,7 @@
 #define GYRO_ENERGY_THRESHOLD 12.0f
 
 /* Minimum confidence to declare a gesture A recognized (Phase 3 spec) */
-#define CONFIDENCE_THRESHOLD 0.9f
+#define CONFIDENCE_THRESHOLD 0.8f
 
 enum app_state {
 	STATE_IDLE,
@@ -89,6 +89,10 @@ int main(void)
 	struct imu_sample sample;
 	enum app_state state = STATE_IDLE;
 	int64_t cooldown_end = 0;
+	/* CSV dump on by default (data collection); 'w' on the console
+	 * toggles watch mode: detections only, the final-product voice
+	 */
+	bool csv_logging = true;
 
 	if (imu_init() < 0) {
 		printk("MPU6050 not ready\n");
@@ -133,6 +137,16 @@ int main(void)
 			}
 		}
 
+		/* 'w' toggles watch mode: with it on the board prints
+		 * detections only and stays quiet about the samples
+		 */
+		if (c == 'w') {
+			csv_logging = !csv_logging;
+			printk("watch mode %s\n",
+			       csv_logging ? "OFF (csv output)" :
+					     "ON (detections only)");
+		}
+
 		/* Wait only for DRDY INT */
 		if (k_sem_take(&sample_sem, K_MSEC(15)) != 0) {
 			continue;
@@ -163,12 +177,6 @@ int main(void)
 					&res);
 
 				if (ret == 0) {
-					printk("inference: P(A)=%.2f P(IDLE)=%.2f -> %s\n",
-					       (double)res.prob_A,
-					       (double)res.prob_IDLE,
-					       res.predicted_class == 0 ?
-						       "A" : "IDLE");
-
 					if (res.predicted_class == 0 &&
 					    res.prob_A >=
 						    CONFIDENCE_THRESHOLD) {
@@ -183,7 +191,10 @@ int main(void)
 				}
 
 				gpio_pin_set_dt(&led, 0);
-				capture_dump_csv();
+
+				if (csv_logging) {
+					capture_dump_csv();
+				}
 				/* Drop ticks missed during the blocking dump */
 				k_sem_reset(&sample_sem);
 				cooldown_end = k_uptime_get() + COOLDOWN_MS;
