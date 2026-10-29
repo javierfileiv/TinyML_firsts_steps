@@ -5,6 +5,7 @@
 #include "imu.h"
 #include "capture.h"
 #include "dfu_boot.h"
+#include "inference.h"
 
 #define COOLDOWN_MS 500
 
@@ -18,6 +19,9 @@
  * 12.0 is roughly 115 dps on each axis combined, tune after first captures
  */
 #define GYRO_ENERGY_THRESHOLD 12.0f
+
+/* Minimum confidence to declare a gesture A recognized (Phase 3 spec) */
+#define CONFIDENCE_THRESHOLD 0.9f
 
 enum app_state {
 	STATE_IDLE,
@@ -101,6 +105,11 @@ int main(void)
 		return 0;
 	}
 
+	if (inference_init() < 0) {
+		printk("TFLM inference init failed\n");
+		return 0;
+	}
+
 	printk("edge_ai data logger ready [dfu v5], 100 Hz, window %u samples\n",
 	       CAPTURE_WINDOW_SIZE);
 
@@ -148,6 +157,31 @@ int main(void)
 
 		case STATE_ACQUIRE:
 			if (capture_feed(&sample)) {
+				inference_result_t res;
+				int ret = inference_run(
+					(const float (*)[6])capture_window(),
+					&res);
+
+				if (ret == 0) {
+					printk("inference: P(A)=%.2f P(IDLE)=%.2f -> %s\n",
+					       (double)res.prob_A,
+					       (double)res.prob_IDLE,
+					       res.predicted_class == 0 ?
+						       "A" : "IDLE");
+
+					if (res.predicted_class == 0 &&
+					    res.prob_A >=
+						    CONFIDENCE_THRESHOLD) {
+						printk(">>> GESTURE A detected (confidence %.2f) <<<\n",
+						       (double)res.prob_A);
+					} else {
+						printk(">>> GESTURE IDLE detected (confidence %.2f) <<<\n",
+						       (double)res.prob_IDLE);	
+					}					
+				} else {
+					printk("inference failed: %d\n", ret);
+				}
+
 				gpio_pin_set_dt(&led, 0);
 				capture_dump_csv();
 				/* Drop ticks missed during the blocking dump */

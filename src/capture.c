@@ -42,6 +42,11 @@ bool capture_feed(const struct imu_sample *sample)
 	return window_pos >= CAPTURE_WINDOW_SIZE;
 }
 
+const struct imu_sample *capture_window(void)
+{
+	return window;
+}
+
 void capture_dump_csv(void)
 {
 	printk("BEGIN\n");

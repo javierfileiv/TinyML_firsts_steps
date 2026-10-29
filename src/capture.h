@@ -18,6 +18,11 @@ void capture_prebuffer_push(const struct imu_sample *sample);
  */
 void capture_begin(void);
 
+/* Returns the internal capture window, layout-compatible with
+ * float[CAPTURE_WINDOW_SIZE][6] in the ax,ay,az,gx,gy,gz order
+ */
+const struct imu_sample *capture_window(void);
+
 /* Appends one sample to the capture window
  * Returns true when the window is full (CAPTURE_WINDOW_SIZE samples)
  */
