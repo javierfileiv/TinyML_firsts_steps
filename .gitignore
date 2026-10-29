@@ -22,3 +22,4 @@ build/
 # Dataset (large binary-ish captures)
 dataset/
 dataset_128/
+model_gesture_int8.tflite
