@@ -1,5 +1,6 @@
 #include "inference.h"
 #include "model_data.h"
+#include "model_params.h"
 
 #include <math.h>
 #include <zephyr/sys/printk.h>
@@ -9,14 +10,10 @@
 #include <tensorflow/lite/schema/schema_generated.h>
 
 namespace {
-    const float norm_mean[6] = {4.483182f, -1.584734f, -0.164688f, -0.084898f, -0.010373f, -0.078183f};
-    const float norm_std[6]  = {6.323884f, 4.822824f, 7.081272f, 1.798846f, 0.938258f, 1.596378f};
-
-    const float kInputScaleInv = 14.160927f;
-    const int32_t kInputZeroPoint = -5;
-    const float kOutputScale = 0.00390625f;
-    const int32_t kOutputZeroPoint = -128;
-
+    /* Memory arena for the activations and intermediate tensors:
+     * the simple planner needs ~10.5 KB for this graph, 14 KB leaves
+     * margin for future model changes
+     */
     constexpr int kTensorArenaSize = 14 * 1024;
     alignas(16) uint8_t tensor_arena[kTensorArenaSize];
 

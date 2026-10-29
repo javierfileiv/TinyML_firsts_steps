@@ -19,7 +19,6 @@ build/
 *.bin
 *.hex
 
-# Dataset (large binary-ish captures)
-dataset/
-dataset_128/
 model_gesture_int8.tflite
+MEDIA/
+notebook_jupiter/.ipynb_checkpoints
