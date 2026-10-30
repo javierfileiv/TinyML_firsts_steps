@@ -20,6 +20,11 @@ typedef struct {
 int inference_init(void);
 int inference_run(const float raw_data[CAPTURE_SAMPLES][IMU_CHANNELS], inference_result_t *result);
 
+/* Cycles spent in the last inference, as counted by the DWT cycle
+ * counter (CPU clock: 96 MHz)
+ */
+uint32_t inference_last_cycles(void);
+
 #ifdef __cplusplus
 }
 #endif

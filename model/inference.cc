@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <zephyr/sys/printk.h>
+#include <cmsis_core.h>
 
 #include <tensorflow/lite/micro/micro_interpreter.h>
 #include <tensorflow/lite/micro/micro_mutable_op_resolver.h>
@@ -21,6 +22,9 @@ namespace {
     tflite::MicroInterpreter* interpreter = nullptr;
     TfLiteTensor* input_tensor = nullptr;
     TfLiteTensor* output_tensor = nullptr;
+
+    /* Cycles of the last Invoke, as counted by the DWT */
+    uint32_t last_cycles = 0;
 }
 
 static inline int8_t quantize_sample(float val)
@@ -61,6 +65,12 @@ extern "C" int inference_init(void)
     input_tensor = interpreter->input(0);
     output_tensor = interpreter->output(0);
 
+    /* Arm the DWT cycle counter: TRCENA first, then the counter, which
+     * ticks once per CPU clock cycle (96 MHz)
+     */
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
     printk("TFLM: init done, tensor arena used: %u bytes\n",
            interpreter->arena_used_bytes());
 
@@ -85,11 +95,13 @@ extern "C" int inference_run(const float raw_data[CAPTURE_SAMPLES][IMU_CHANNELS]
         }
     }
 
-    /* 2. Inference */
+    /* 2. Inference, timed by the DWT cycle counter */
+    uint32_t t0 = DWT->CYCCNT;
     if (interpreter->Invoke() != kTfLiteOk) {
         printk("TFLM: Invoke failed\n");
         return -2;
     }
+    last_cycles = DWT->CYCCNT - t0;
 
     /* 3. Output de-quantization */
     const int8_t* out_ptr = output_tensor->data.int8;
@@ -99,4 +111,9 @@ extern "C" int inference_run(const float raw_data[CAPTURE_SAMPLES][IMU_CHANNELS]
     result->predicted_class = (result->prob_A >= result->prob_IDLE) ? 0 : 1;
 
     return 0;
+}
+
+uint32_t inference_last_cycles(void)
+{
+    return last_cycles;
 }

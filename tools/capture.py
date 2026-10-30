@@ -58,6 +58,9 @@ def space_forwarder(port: serial.Serial, stop: threading.Event,
         elif ch == "w":
             port.write(b"w")
             print("[w] toggled watch mode on the board")
+        elif ch == "p":
+            port.write(b"p")
+            print("[p] bench requested on the board")
         elif ch == "q":
             stop.set()
 

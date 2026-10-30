@@ -23,6 +23,15 @@
 /* Minimum confidence to declare a gesture A recognized (Phase 3 spec) */
 #define CONFIDENCE_THRESHOLD 0.8f
 
+/* Which inference kernel set this build runs: the timing lines say
+ * which engine produced each number
+ */
+#ifdef CONFIG_TENSORFLOW_LITE_MICRO_CMSIS_NN_KERNELS
+#define KERNEL_TAG "cmsis_nn"
+#else
+#define KERNEL_TAG "reference"
+#endif
+
 enum app_state {
 	STATE_IDLE,
 	STATE_ACQUIRE,
@@ -147,6 +156,30 @@ int main(void)
 					     "ON (detections only)");
 		}
 
+		/* 'p' benches the last captured window: five inferences
+		 * through the DWT cycle counter, averaged
+		 */
+		if (c == 'p') {
+			uint32_t total = 0;
+
+			for (int i = 0; i < 5; i++) {
+				inference_result_t r;
+
+				if (inference_run(
+					    (const float (*)[6])
+						    capture_window(),
+					    &r) != 0) {
+					printk("bench: inference failed\n");
+					break;
+				}
+				total += inference_last_cycles();
+			}
+			printk("bench: %u cycles avg over 5 runs (%u us) [%s]\n",
+			       (unsigned)(total / 5U),
+			       (unsigned)(total / 5U / 96U),
+			       KERNEL_TAG);
+		}
+
 		/* Wait only for DRDY INT */
 		if (k_sem_take(&sample_sem, K_MSEC(15)) != 0) {
 			continue;
@@ -186,6 +219,11 @@ int main(void)
 						printk(">>> GESTURE IDLE detected (confidence %.2f) <<<\n",
 						       (double)res.prob_IDLE);	
 					}					
+
+					printk("inference: %u cycles (%u us) [%s]\n",
+					       (unsigned)inference_last_cycles(),
+					       (unsigned)(inference_last_cycles() / 96U),
+					       KERNEL_TAG);
 				} else {
 					printk("inference failed: %d\n", ret);
 				}

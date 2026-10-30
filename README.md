@@ -11,8 +11,8 @@ Core constraints:
 - Deterministic real time on Zephyr RTOS, sampling at exactly 100 Hz
 - Zero dynamic allocation: every buffer is static (`.bss`/`.rodata`)
 - The int8 model (~11 KB) and the 13.9 KB tensor arena live entirely in
-  the chip's 512 KB Flash and 128 KB SRAM; latency profiling is on the
-  roadmap (target: milliseconds per window)
+  the chip's 512 KB Flash and 128 KB SRAM; inference latency is measured
+  on-device with the DWT cycle counter (see Benchmarking)
 - Model weights stored in Flash as an aligned `const` C array, int8
   Post-Training Quantization end to end
 
@@ -33,7 +33,7 @@ Core constraints:
 | MPU INT (data-ready) | PA2 | Rising-edge EXTI, DRDY driver |
 | KEY button | PA0 | Active low, internal pull-up — manual capture trigger |
 | User LED | PC13 | Active low — capture/window feedback |
-| Console | USB CDC ACM (`/dev/ttyACM0`) | Logging, `dfu` reflash trigger, space capture command, `w` watch toggle |
+| Console | USB CDC ACM (`/dev/ttyACM0`) | Logging, `dfu` reflash trigger, space capture command, `w` watch toggle, `p` benchmark |
 
 Board: WeAct Studio BlackPill V2/V3 (`blackpill_f411ce`), 96 MHz SYSCLK,
 100 Hz sampling reached by hand-configured DLPF + SMPLRT_DIV (see
@@ -47,8 +47,8 @@ Board: WeAct Studio BlackPill V2/V3 (`blackpill_f411ce`), 96 MHz SYSCLK,
   (`ENABLE_AUTO_TRIGGER`). The main loop only advances on DRDY interrupt
   samples so every recorded sample is exactly 10 ms apart. On every
   completed window the TFLM model runs and the board prints its
-  verdict; watch mode (`w`) silences the CSV dump so the board speaks
-  only in detections.
+  verdict (tagged with the kernel set in use); watch mode (`w`) silences
+  the CSV dump so the board speaks only in detections.
 - `src/imu.c/h` — MPU6050 bring-up: manual register configuration for
   exact 100 Hz (DLPF bypassing + SMPLRT_DIV), DRDY interrupt hooked to
   PA2, polled reads of the 14 registers per sample.
@@ -74,7 +74,8 @@ Board: WeAct Studio BlackPill V2/V3 (`blackpill_f411ce`), 96 MHz SYSCLK,
     generated from the converted model itself; never edited by hand.
 - `boards/blackpill_f411ce.overlay` — I2C1 pin muxing, MPU6050 node with
   INT on PA2, USB CDC ACM console mapping.
-- `prj.conf` — USB device stack, console, sensor, GPIO, C++ and TFLM.
+- `prj.conf` — USB device stack, console, sensor, GPIO, C++ and TFLM
+  with the CMSIS-NN accelerated kernels enabled.
 
 ## Host tool
 
@@ -98,6 +99,9 @@ python tools/capture.py -p /dev/ttyACM0 --watch        # detections only, no fil
 - Typing `w` (in tio, or in the tool's terminal) toggles watch mode on
   the board: the CSV dump goes silent and only the detections are
   printed — the final-product voice.
+- `p` re-runs the last captured window through the model five times and
+  prints the average cost in DWT cycles and microseconds, tagged
+  `[reference]` or `[cmsis_nn]`.
 - Every window is validated and required to contain exactly 256 rows;
   malformed or short frames are dropped with a warning.
 - `q` or Ctrl-C quits and restores the terminal.
@@ -162,7 +166,35 @@ lost; open the console first, then press RESET, to see the boot.
   MaxPool2, GlobalAveragePooling1D, Dense(16), softmax
 - Runtime: TFLM, full int8 PTQ; dense layers are per-tensor quantized
   because this TFLM revision does not support per-channel
-  FULLY_CONNECTED kernels
+  FULLY_CONNECTED kernels. The CMSIS-NN accelerated kernels are enabled
+  (`CONFIG_TENSORFLOW_LITE_MICRO_CMSIS_NN_KERNELS=y`), so every
+  convolution, pooling and fully-connected layer runs through hand-written
+  SIMD code using the Cortex-M4's dual-MAC SMLAD instructions.
+
+## Benchmarking
+
+Latency is measured on the chip itself with the Cortex-M4 DWT cycle
+counter: armed once at `inference_init()`, it ticks once per CPU clock
+cycle (96 MHz), so no Zephyr tick resolution is involved.
+
+- Every completed window prints
+  `inference: <cycles> cycles (<us> us) [<kernel>]` — the time of the
+  `Invoke()` alone, i.e. the int8 graph without the floating-point
+  z-score/quantization that wraps it.
+- Typing `p` (in tio or through `tools/capture.py`) re-runs the last
+  captured window five times and prints the average as
+  `bench: <cycles> cycles avg over 5 runs (<us> us) [<kernel>]` —
+  a stable figure to compare builds with.
+- The `[kernel]` tag is deduced at compile time from the Kconfig: this
+  firmware reports `[cmsis_nn]`. To measure the reference kernels,
+  comment the CMSIS-NN line in `prj.conf`, rebuild with
+  `west build -p`, flash and re-run the same `p` — the two numbers then
+  decide for good whether the SIMD kernels stay enabled.
+
+The `p` bench measures only what the driver can isolate: the sensor
+conversion and the normalization loop stay outside the counter, which is
+exactly what makes a kernel-set comparison fair — they are identical in
+both builds.
 
 ## Dataset guidance
 
@@ -182,8 +214,6 @@ captures for inspection.
 
 1. Class B: harvest captures, retrain with the notebook (three lines
    of validation rules), verify on watch mode
-2. DWT latency profiling around the inference call, then decide
-   whether the CMSIS-NN accelerated kernels are worth enabling
 3. Long-term robustness: capture sessions on different days and hand
    orientations, count false positives, recalibrate the 0.80
    confidence threshold if needed
